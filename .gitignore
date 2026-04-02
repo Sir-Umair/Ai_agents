@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+.env
+
+# Node.js
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+*.log
+
+# Project specific
+faiss_index/
+pic/
+docs/
+products.pdf
+products.txt
+embeddings_models.txt
+testing.py
+test_backend.py
+test_backend_v2.py

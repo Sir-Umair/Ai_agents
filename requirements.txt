@@ -1,0 +1,21 @@
+# Flask & CORS
+flask
+flask-cors
+
+# LangChain core & components
+langchain
+langchain-core
+langchain-community
+langchain-anthropic
+langchain-huggingface
+langchain-text-splitters
+
+# Vector Stores
+faiss-cpu
+
+# Document loaders
+pdfminer.six
+
+# Other
+python-dotenv
+sentence-transformers
