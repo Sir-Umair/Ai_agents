@@ -61,6 +61,19 @@ export default function CampaignDashboard() {
     }
   }
 
+  async function handleDeleteCampaign(e: React.MouseEvent, id: string) {
+    e.stopPropagation();
+    if (!confirm('Are you sure you want to delete this campaign and all its activity logs? This cannot be undone.')) return;
+    
+    try {
+      await api.deleteCampaign(id);
+      setCampaigns(prev => prev.filter(c => c.id !== id));
+      if (expandedCampaign === id) setExpandedCampaign(null);
+    } catch (err: any) {
+      alert('Failed to delete campaign: ' + err.message);
+    }
+  }
+
   return (
     <div style={{ padding: '1rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3rem' }}>
@@ -145,6 +158,24 @@ export default function CampaignDashboard() {
                       <div style={{ fontSize: '1.5rem', fontWeight: 800 }}>{totalLeads}</div>
                       <div style={{ fontSize: '0.75rem', color: 'var(--muted-foreground)', fontWeight: 600 }}>TARGETS</div>
                     </div>
+                    <button 
+                      onClick={(e) => handleDeleteCampaign(e, campaign.id)}
+                      style={{ 
+                        background: 'transparent', 
+                        border: '1px solid #fee2e2', 
+                        color: '#ef4444', 
+                        padding: '0.5rem', 
+                        borderRadius: '8px',
+                        cursor: 'pointer',
+                        fontSize: '0.75rem',
+                        fontWeight: 600,
+                        transition: 'all 0.2s'
+                      }}
+                      onMouseOver={(e) => e.currentTarget.style.background = '#fee2e2'}
+                      onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
+                    >
+                      Delete
+                    </button>
                     <div style={{ fontSize: '1.5rem', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 0.3s' }}>▼</div>
                   </div>
                 </div>

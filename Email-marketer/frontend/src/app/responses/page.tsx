@@ -112,6 +112,19 @@ export default function ResponsesPage() {
     }
   }
 
+  async function handleDeleteCampaign(e: React.MouseEvent, id: string) {
+    e.stopPropagation();
+    if (!confirm('Are you sure you want to delete this campaign and all its responses? This cannot be undone.')) return;
+    
+    try {
+      await api.deleteCampaign(id);
+      setCampaigns(prev => prev.filter(c => c.id !== id));
+      showToast('Campaign deleted successfully.');
+    } catch (err: any) {
+      showToast('Failed to delete campaign: ' + err.message, 'error');
+    }
+  }
+
   function exportCSV() {
     // Collect all leads from all campaigns
     const allLeads = campaigns.flatMap(c => c.leads.map(l => ({ campaign: c.subject, ...l })));
@@ -214,11 +227,33 @@ export default function ResponsesPage() {
                         </span>
                       </td>
                       <td style={{ padding: '1rem' }}>
-                        {repliesCount > 0 ? (
-                          <span style={{ color: '#16a34a', fontWeight: 600 }}>{repliesCount} Replied</span>
-                        ) : (
-                          <span style={{ color: 'var(--muted-foreground)' }}>No replies yet</span>
-                        )}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          {repliesCount > 0 ? (
+                            <span style={{ color: '#16a34a', fontWeight: 600 }}>{repliesCount} Replied</span>
+                          ) : (
+                            <span style={{ color: 'var(--muted-foreground)' }}>No replies yet</span>
+                          )}
+                          <button 
+                            onClick={(e) => handleDeleteCampaign(e, c.id)}
+                            style={{ 
+                              background: 'transparent', 
+                              border: 'none', 
+                              color: '#ef4444', 
+                              padding: '0.25rem 0.5rem', 
+                              borderRadius: '4px',
+                              cursor: 'pointer',
+                              fontSize: '0.7rem',
+                              fontWeight: 600,
+                              marginLeft: '1rem',
+                              opacity: 0.6,
+                              transition: 'opacity 0.2s'
+                            }}
+                            onMouseOver={(e) => e.currentTarget.style.opacity = '1'}
+                            onMouseOut={(e) => e.currentTarget.style.opacity = '0.6'}
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </td>
                     </tr>
                     

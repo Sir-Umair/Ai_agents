@@ -53,7 +53,9 @@ class FollowUpService:
                     to_email=log["recipient"],
                     subject=follow_up_subject,
                     body=follow_up_body,
-                    user_email=user_email
+                    user_email=user_email,
+                    campaign_id=log.get("campaign_id"),
+                    auto_reply_prompt=log.get("auto_reply_prompt")
                 )
                 
                 if send_result.get("success"):

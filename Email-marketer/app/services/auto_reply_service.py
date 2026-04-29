@@ -34,23 +34,26 @@ class AutoReplyService:
                 "user_email": {"$regex": f"^{user_email}$", "$options": "i"}
             })
             
+            auto_reply_enabled = True
             if user_settings and not user_settings.get("auto_reply_enabled", True):
-                print(f"[AutoReply] SKIPPED: Auto-reply is paused for {user_email}")
-                return {"status": "skipped", "message": "Auto-reply is paused"}
+                print(f"[AutoReply] Syncing logs only (Auto-reply is paused for {user_email})")
+                auto_reply_enabled = False
 
             creds = await get_user_credentials(user_email)
             service = build('gmail', 'v1', credentials=creds)
 
-            # Search only for UNREAD messages in the inbox
-            query = "is:unread label:inbox"
+            # Search for messages in the inbox
+            # We include recently read messages in case the user clicked them in Gmail, 
+            # ensuring they are still processed by our sync.
+            query = "label:inbox -from:me newer_than:3d"
             results = await asyncio.to_thread(service.users().messages().list(userId='me', q=query).execute)
             messages = results.get('messages', [])
             
             if not messages:
-                print(f"[AutoReply] No new unread messages for {user_email}")
+                print(f"[AutoReply] No new messages found in inbox for {user_email}")
                 return {"status": "success", "processed": 0, "replies_sent": 0}
 
-            print(f"[AutoReply] Found {len(messages)} unread messages to process for {user_email}")
+            print(f"[AutoReply] Found {len(messages)} messages to check for {user_email}")
 
             # Get already processed IDs for this user
             already_processed = set()
@@ -66,7 +69,7 @@ class AutoReplyService:
             new_messages = [m for m in messages if m['id'] not in already_processed]
             
             if not new_messages:
-                print(f"[AutoReply] All {len(messages)} unread messages were already processed for {user_email}")
+                print(f"[AutoReply] All {len(messages)} inbox messages were already processed for {user_email}")
                 return {"status": "success", "processed": 0, "replies_sent": 0}
 
             # Process new messages in parallel with a concurrency limit
@@ -74,7 +77,7 @@ class AutoReplyService:
             
             async def bounded_process(msg_id):
                 async with semaphore:
-                    return await self._process_single_message(creds, user_email, msg_id)
+                    return await self._process_single_message(creds, user_email, msg_id, auto_reply_enabled)
 
             tasks = [bounded_process(msg_item['id']) for msg_item in new_messages]
             results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -107,7 +110,7 @@ class AutoReplyService:
             traceback.print_exc()
             return {"status": "error", "message": str(e)}
 
-    async def _process_single_message(self, creds, user_email: str, msg_id: str):
+    async def _process_single_message(self, creds, user_email: str, msg_id: str, auto_reply_enabled: bool = True):
         """Processes a single Gmail message: categorizes, replies, marks as read, and logs."""
         try:
             # Build service locally for this task (thread-safety)
@@ -116,6 +119,7 @@ class AutoReplyService:
             
             payload = msg.get('payload', {})
             headers = payload.get('headers', [])
+            thread_id = msg.get('threadId')
             
             subject = next((h['value'] for h in headers if h['name'].lower() == 'subject'), '(No Subject)')
             sender_raw = next((h['value'] for h in headers if h['name'].lower() == 'from'), '')
@@ -129,11 +133,6 @@ class AutoReplyService:
                 sender_name = sender_email.split("@")[0]
 
             if sender_email.lower() == user_email.lower():
-                # Still mark as read so we don't keep checking it
-                await asyncio.to_thread(service.users().messages().batchModify(userId='me', body={
-                    'ids': [msg_id],
-                    'removeLabelIds': ['UNREAD']
-                }).execute)
                 return {"status": "skipped", "reason": "self-email"}
 
             print(f"[AutoReply] Processing email from: {sender_email} (Subject: {subject})")
@@ -150,18 +149,23 @@ class AutoReplyService:
             campaign_instruction = None
             orig_log = None
             if email_logs_collection is not None:
-                orig_log = await email_logs_collection.find_one({
-                    "user_email": user_email,
-                    "type": "sent",
-                    "recipient": {"$regex": f"^{sender_email}$", "$options": "i"}
-                }, sort=[("timestamp", -1)])
+                # Try thread_id match first (most accurate)
+                if thread_id:
+                    orig_log = await email_logs_collection.find_one({
+                        "user_email": user_email,
+                        "type": "sent",
+                        "thread_id": thread_id
+                    })
+                
+                # Fallback to recipient email match
+                if not orig_log:
+                    orig_log = await email_logs_collection.find_one({
+                        "user_email": user_email,
+                        "type": "sent",
+                        "recipient": {"$regex": f"^{sender_email}$", "$options": "i"}
+                    }, sort=[("timestamp", -1)])
                 
             if not orig_log:
-                # Mark as read so we don't process it again, but skip AI categorization
-                await asyncio.to_thread(service.users().messages().batchModify(userId='me', body={
-                    'ids': [msg_id],
-                    'removeLabelIds': ['UNREAD']
-                }).execute)
                 print(f"[AutoReply] SKIPPED: No previous sent email found for {sender_email}. Not a lead response.")
                 return {"status": "skipped", "reason": "not-a-lead"}
 
@@ -181,7 +185,7 @@ class AutoReplyService:
 
             # Send reply if needed
             reply_sent = False
-            if reply_content:
+            if auto_reply_enabled and reply_content:
                 result = await send_email(
                     to_email=sender_email,
                     subject=f"Re: {subject}",
@@ -190,6 +194,8 @@ class AutoReplyService:
                     skip_log=True
                 )
                 reply_sent = result.get("success", False)
+            elif not auto_reply_enabled:
+                print(f"[AutoReply] LOG ONLY: Skipping automated response to {sender_email} as service is paused.")
                 
             # Mark as read in Gmail
             await asyncio.to_thread(service.users().messages().batchModify(userId='me', body={

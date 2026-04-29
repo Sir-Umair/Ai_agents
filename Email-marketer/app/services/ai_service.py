@@ -29,49 +29,48 @@ class AIService:
         self.graph = self._build_auto_reply_graph()
 
     def _build_auto_reply_graph(self):
-        """Constructs the LangGraph for auto-replies."""
+        """Constructs the LangGraph for auto-replies with optimized single-pass processing."""
         builder = StateGraph(AgentState)
 
-        # 1. Categorization Node
-        async def categorize_node(state: AgentState):
+        # Unified Node for speed
+        async def process_email_node(state: AgentState):
+            instruction = state.get("instruction", "")
             prompt = f"""Analyze this email from {state['sender_name']}:
             
             Subject: {state['subject']}
             Body: {state['incoming_email']}
             
-            Categorize the intent into exactly one of these: [interest, question, unsubscribe, spam]
-            Return ONLY the category name. No other text, formatting, or labels."""
+            1. Categorize intent into exactly one: [interest, question, unsubscribe, spam]
+            2. If 'interest' or 'question', write a concise, warm plain-text reply. 
+            {f"MANDATORY INSTRUCTION: {instruction}" if instruction else ""}
             
-            response = await self.llm.ainvoke([HumanMessage(content=prompt)])
-            category = response.content.strip().lower()
-            return {"intent": category}
+            Return ONLY a JSON object:
+            {{
+              "intent": "category",
+              "reply_body": "your reply text or empty string"
+            }}"""
+            
+            import json
+            try:
+                response = await self.llm.ainvoke([HumanMessage(content=prompt)])
+                content = self._clean_text(response.content)
+                # Simple JSON extraction
+                if "{" in content and "}" in content:
+                    content = content[content.find("{"):content.rfind("}")+1]
+                data = json.loads(content)
+                return {
+                    "intent": data.get("intent", "spam").lower(),
+                    "reply_body": data.get("reply_body", "")
+                }
+            except Exception as e:
+                print(f"AI Optimization Error: {e}")
+                # Fallback to safe defaults
+                return {"intent": "spam", "reply_body": ""}
 
-        # 2. Generator Node
-        async def generate_reply_node(state: AgentState):
-            if state["intent"] in ["interest", "question"]:
-                instruction = state.get("instruction", "")
-                system_prompt = f"You are a professional marketer replying to {state['sender_name']}. Keep it concise and warm. Provide the reply in PLAIN TEXT ONLY. Do NOT use HTML, Markdown, or any code tags."
-                if instruction:
-                    system_prompt += f" MANDATORY INSTRUCTION: {instruction}"
-                
-                user_prompt = f"Generate a helpful plain-text reply to this: {state['incoming_email']}"
-                
-                response = await self.llm.ainvoke([
-                    SystemMessage(content=system_prompt),
-                    HumanMessage(content=user_prompt)
-                ])
-                return {"reply_body": self._clean_text(response.content)}
-            elif state["intent"] == "unsubscribe":
-                return {"reply_body": "You have been successfully unsubscribed from our list."}
-            return {"reply_body": ""}
-
-        # Define Edges and Nodes
-        builder.add_node("categorize", categorize_node)
-        builder.add_node("generate_reply", generate_reply_node)
-        
-        builder.set_entry_point("categorize")
-        builder.add_edge("categorize", "generate_reply")
-        builder.add_edge("generate_reply", END)
+        # Define Graph
+        builder.add_node("process", process_email_node)
+        builder.set_entry_point("process")
+        builder.add_edge("process", END)
         
         return builder.compile()
 

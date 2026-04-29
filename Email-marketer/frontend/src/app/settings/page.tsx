@@ -44,6 +44,13 @@ export default function SettingsPage() {
   }, []);
 
   const handleSaveProfile = async () => {
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!personalDetails.email || !emailRegex.test(personalDetails.email)) {
+      showToast('Please enter a valid email address.', 'error');
+      return;
+    }
+
     try {
       setSaving(true);
       await api.updateSettings(personalDetails);

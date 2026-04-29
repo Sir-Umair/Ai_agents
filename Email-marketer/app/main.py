@@ -30,7 +30,7 @@ async def background_monitoring_task():
         except Exception as e:
             print(f"[Background Worker] Error: {e}")
             
-        await asyncio.sleep(60) # Run every minute
+        await asyncio.sleep(30) # Run every 30 seconds for more responsiveness
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

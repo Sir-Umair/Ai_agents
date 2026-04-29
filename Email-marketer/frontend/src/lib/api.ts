@@ -210,12 +210,38 @@ export const api = {
     return response.json();
   },
 
+  async deleteCampaign(campaignId: string) {
+    const response = await fetch(`${API_BASE_URL}/responses/campaign/${campaignId}`, {
+      method: 'DELETE',
+      headers: getHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to delete campaign');
+    return response.json();
+  },
+
   // Recent activity logs for dashboard
-  async getRecentLogs(limit = 10) {
+  async getRecentLogs(limit = 50) {
     const response = await fetch(`${API_BASE_URL}/logs/recent?limit=${limit}`, {
       headers: getHeaders(),
     });
     if (!response.ok) throw new Error('Failed to fetch logs');
+    return response.json();
+  },
+
+  async getStats() {
+    const response = await fetch(`${API_BASE_URL}/logs/stats`, {
+      headers: getHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to fetch stats');
+    return response.json();
+  },
+
+  async deleteLog(id: string) {
+    const response = await fetch(`${API_BASE_URL}/logs/${id}`, {
+      method: 'DELETE',
+      headers: getHeaders(),
+    });
+    if (!response.ok) throw new Error('Failed to delete log');
     return response.json();
   },
 };

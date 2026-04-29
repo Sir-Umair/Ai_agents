@@ -80,18 +80,16 @@ export default function Dashboard() {
 
   async function fetchDashboardData() {
     try {
-      const [leads, recentLogs] = await Promise.all([
+      const [leads, recentLogs, dashboardStats] = await Promise.all([
         api.getLeads().catch(() => []),
-        api.getRecentLogs(10).catch(() => []),
+        api.getRecentLogs(50).catch(() => []),
+        api.getStats().catch(() => ({ sent: 0, replies: 0 }))
       ]);
-
-      const sentCount = recentLogs.filter((l: LogEntry) => l.type === 'sent').length;
-      const replyCount = recentLogs.filter((l: LogEntry) => l.intent).length;
 
       setStats({
         totalLeads: Array.isArray(leads) ? leads.length : 0,
-        emailsSent: sentCount,
-        clientReplies: replyCount,
+        emailsSent: dashboardStats.sent,
+        clientReplies: dashboardStats.replies,
         aiCredits: 'Unlimited',
       });
       setLogs(recentLogs);
@@ -144,6 +142,18 @@ export default function Dashboard() {
     }
     const toEmail = log.recipient || log.email;
     return `To: ${toEmail || 'Multiple'}`;
+  }
+
+  async function handleDeleteLog(e: React.MouseEvent, id: string) {
+    e.stopPropagation();
+    if (!confirm('Delete this activity log?')) return;
+    try {
+      await api.deleteLog(id);
+      setLogs(prev => prev.filter(log => log.id !== id));
+      showToast('Log deleted successfully.');
+    } catch (err) {
+      showToast('Failed to delete log.', 'error');
+    }
   }
 
   return (
@@ -232,6 +242,7 @@ export default function Dashboard() {
                     <th>Status</th>
                     <th>Date</th>
                     <th>Result</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -247,6 +258,22 @@ export default function Dashboard() {
                           <td>{getStatusBadge(log)}</td>
                           <td>{new Date(log.timestamp).toLocaleString()}</td>
                           <td>{getResult(log)}</td>
+                          <td>
+                            <button 
+                              onClick={(e) => handleDeleteLog(e, log.id)}
+                              style={{ 
+                                background: 'transparent', 
+                                border: 'none', 
+                                color: '#ef4444', 
+                                fontSize: '0.75rem', 
+                                cursor: 'pointer',
+                                fontWeight: 600,
+                                opacity: 0.7
+                              }}
+                            >
+                              Delete
+                            </button>
+                          </td>
                         </tr>
                         {isExpanded && (
                           <tr style={{ background: 'rgba(0,0,0,0.02)' }}>
